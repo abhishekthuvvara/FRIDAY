@@ -3,7 +3,8 @@ uvicorn
 python-dotenv
 pydantic
 supabase
-google-generativeai
+google-genai
+
 httpx
 slowapi
 pytest

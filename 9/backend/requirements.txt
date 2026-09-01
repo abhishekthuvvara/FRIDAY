@@ -1,8 +1,8 @@
 fastapi
 uvicorn
-python-dotenv
 pydantic
+pydantic-settings
 supabase
-google-generativeai
-httpx
 slowapi
+google-genai
+python-dotenv
