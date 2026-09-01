@@ -1,0 +1,8 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+@layer base { body { @apply bg-friday-bg text-gray-200 antialiased min-h-screen overflow-hidden; font-family: 'Inter', sans-serif; } }
+@layer utilities {
+  .glass-panel { @apply bg-glass-gradient backdrop-blur-md border border-white/5 shadow-glass rounded-2xl; }
+  .glow-border { @apply border border-friday-accent/30 shadow-glow transition-all duration-300; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}

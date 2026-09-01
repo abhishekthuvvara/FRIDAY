@@ -1,0 +1,2 @@
+-- PHASE 4: Database Schema and RLS Policies
+-- (Code remains identical to Phase 4)

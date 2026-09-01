@@ -1,0 +1,33 @@
+services:
+  # Backend Web Service (FastAPI)
+  - type: web
+    name: friday-backend
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false # Set this to the generated frontend URL after deployment
+
+  # Frontend Static Site (React + Vite)
+  - type: static
+    name: friday-frontend
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: "./frontend/dist"
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -1,0 +1,37 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.279.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.0",
+    "react-router-dom": "^6.16.0",
+    "react-syntax-highlighter": "^15.5.0",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.0.0",
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "autoprefixer": "^10.4.15",
+    "eslint": "^8.45.0",
+    "jsdom": "^22.1.0",
+    "postcss": "^8.4.29",
+    "tailwindcss": "^3.3.3",
+    "vite": "^4.4.5",
+    "vitest": "^0.34.4"
+  }
+}
