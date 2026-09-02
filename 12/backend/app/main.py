@@ -129,7 +129,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
 
         # Fixed Model Name: gemini-3.5-flash does not exist. Used standard 1.5-flash.
         chat_session = client.chats.create(
-            model="gemini-1.5-flash",
+            model="gemini-3.5-flash",
             history=formatted_history,
             config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
         )
