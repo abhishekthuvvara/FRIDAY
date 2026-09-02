@@ -33,8 +33,18 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"],
 )
 
+# --- Environment variable checks (fail loudly and clearly, not with a buried crash) ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY environment variable. Set it in Render's backend Environment tab.")
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    raise RuntimeError("Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variable. Set them in Render's backend Environment tab.")
+
 # GEMINI INTEGRATION
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """You are FRIDAY, an AI coding assistant specializing in Python.
 Your priorities are:
@@ -56,7 +66,7 @@ When generating code:
 """
 
 # SUPABASE CLIENT FOR AUTHENTICATION
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 security = HTTPBearer()
 
 def verify_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -76,7 +86,7 @@ class Message(BaseModel):
     is_validated: Optional[bool] = False
 
 class ChatRequest(BaseModel):
-    messages: List[Message] = Field(..., max_items=100)
+    messages: List[Message] = Field(..., max_length=100)
 
 def extract_python_code(text: str) -> List[str]:
     pattern = r"```(?:python)?\n(.*?)\n```"
