@@ -9,6 +9,6 @@ A production-style AI coding assistant focused on Python programming, featuring 
    - Click "Blueprints" -> "New Blueprint Instance".
    - Select your GitHub repository. Render will read the `render.yaml` file automatically.
 3. **Configure Environment Variables**:
-   - In the Render dashboard, populate the required environment variables for the Backend (`GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) and Frontend (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
+   - In the Render dashboard, populate the required environment variables for the Backend (`GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) and Frontend (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_BACKEND_URL`). Set `VITE_BACKEND_URL` to the deployed backend URL, such as `https://friday-backend-xxxx.onrender.com`.
    - Once the frontend is deployed, copy its URL and set it as the `FRONTEND_URL` environment variable in your Backend service configuration to allow CORS.
 4. **Documentation**: Refer to `docs/BTech_Project_Report.md` for the comprehensive project architecture report needed for your final-year presentation.
