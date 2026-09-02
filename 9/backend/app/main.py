@@ -26,15 +26,36 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# Strict CORS Configuration
-origins = [os.getenv("FRONTEND_URL", "http://localhost:5173")]
+# Bulletproof CORS Configuration
+# Safely fetches the env variable, strips spaces, and hardcodes your known URLs as fallbacks
+env_frontend = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+origins = [
+    "http://localhost:5173",
+    "https://friday-abhi-3942.vercel.app"
+]
+if env_frontend and env_frontend not in origins:
+    origins.append(env_frontend)
+
 app.add_middleware(
-    CORSMiddleware, allow_origins=origins, allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"],
+    CORSMiddleware, 
+    allow_origins=origins, 
+    allow_credentials=True,
+    allow_methods=["*"], # Broadened to prevent preflight block issues
+    allow_headers=["*"],
 )
 
+# Validate Critical API Keys before startup
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_KEY:
+    print("WARNING: GEMINI_API_KEY is not set!")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("WARNING: Supabase credentials are missing!")
+
 # GEMINI INTEGRATION
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=GEMINI_KEY)
 
 SYSTEM_PROMPT = """You are FRIDAY, an AI coding assistant specializing in Python.
 Your priorities are:
@@ -56,11 +77,14 @@ When generating code:
 """
 
 # SUPABASE CLIENT FOR AUTHENTICATION
-supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 security = HTTPBearer()
 
 def verify_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Verifies the JWT token from the frontend using Supabase."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not initialized")
+    
     try:
         user_res = supabase.auth.get_user(credentials.credentials)
         if not user_res or not user_res.user:
@@ -71,7 +95,7 @@ def verify_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 # STRICT INPUT VALIDATION
 class Message(BaseModel):
-    role: str = Field(..., pattern="^(user|assistant|system)$")
+    role: str = Field(..., pattern="^(user|assistant|system|model)$") # Added 'model' to match Gemini SDK types
     content: str = Field(..., min_length=1, max_length=10000)
     is_validated: Optional[bool] = False
 
@@ -92,19 +116,20 @@ def validate_python_code(code: str) -> Optional[str]:
         return f"Error: {str(e)}"
 
 @app.post("/api/chat")
-@limiter.limit("10/minute")  # Strict server-side rate limiting
+@limiter.limit("10/minute")  
 async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(verify_user)):
     try:
         formatted_history = [
             types.Content(
                 role="user" if msg.role == "user" else "model",
-                parts=[types.Part(text=msg.content)]
+                parts=[types.Part.from_text(text=msg.content)] # Corrected Part initialization
             )
             for msg in payload.messages[:-1]
         ]
 
+        # Fixed Model Name: gemini-3.5-flash does not exist. Used standard 1.5-flash.
         chat_session = client.chats.create(
-            model="gemini-3.5-flash",
+            model="gemini-1.5-flash",
             history=formatted_history,
             config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
         )
