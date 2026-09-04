@@ -135,7 +135,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
         )
 
         current_prompt = payload.messages[-1].content
-        MAX_RETRIES = 1
+        MAX_RETRIES = 2
 
         for attempt in range(MAX_RETRIES + 1):
             response = chat_session.send_message(current_prompt)
