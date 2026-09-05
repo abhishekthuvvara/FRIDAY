@@ -230,7 +230,7 @@ npm test
 
 FRIDAY is configured for seamless deployment on Render via the included `render.yaml` Blueprint.
 
-live demo🔗:-https://friday-abhi-3942.vercel.app/
+live demo🔗:- https://friday-eight-weld.vercel.app/
 
 👨‍💻 Author ABHISHEK THUVVARA
 
