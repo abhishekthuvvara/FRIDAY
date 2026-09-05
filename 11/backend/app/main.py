@@ -116,7 +116,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
         # Extract prompt from payload before entering the retry loop
         current_prompt = payload.messages[-1].content
         
-        MAX_RETRIES = 2
+        MAX_RETRIES = 1
         for attempt in range(MAX_RETRIES + 1):
             response = chat_session.send_message(current_prompt)
             text_response = response.text
