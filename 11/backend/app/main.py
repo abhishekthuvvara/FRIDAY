@@ -34,7 +34,11 @@ app.add_middleware(
 )
 
 # GEMINI INTEGRATION
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY environment variable.")
+client = genai.Client(api_key=GEMINI_API_KEY)
+
 SYSTEM_PROMPT = """You are FRIDAY, an AI coding assistant specializing in Python.
 Your priorities are:
 1. Correctness
@@ -64,7 +68,8 @@ else:
 security = HTTPBearer()
 
 def verify_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not supabase: return None # For testing without active DB
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Authentication service is not configured.")
     try:
         user_res = supabase.auth.get_user(credentials.credentials)
         if not user_res or not user_res.user:
@@ -95,7 +100,7 @@ def validate_python_code(code: str) -> Optional[str]:
         return f"Error: {str(e)}"
 
 @app.post("/api/chat")
-@limiter.limit("10/minute") 
+@limiter.limit("10/minute")
 async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(verify_user)):
     try:
         formatted_history = []
@@ -106,25 +111,24 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
                     parts=[types.Part.from_text(text=msg.content)]
                 )
             )
-        
+
         chat_session = client.chats.create(
             model="gemini-3.5-flash",
             history=formatted_history,
             config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
         )
-        
-        # Extract prompt from payload before entering the retry loop
+
         current_prompt = payload.messages[-1].content
-        
+
         MAX_RETRIES = 1
         for attempt in range(MAX_RETRIES + 1):
             response = chat_session.send_message(current_prompt)
             text_response = response.text
-            
+
             code_blocks = extract_python_code(text_response)
             all_valid = True
             error_msg = ""
-            
+
             if code_blocks:
                 for code in code_blocks:
                     val_error = validate_python_code(code)
@@ -132,21 +136,21 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
                         all_valid = False
                         error_msg = val_error
                         break
-            
+
             if all_valid:
                 return {
-                    "response": text_response, 
+                    "response": text_response,
                     "validated": len(code_blocks) > 0
                 }
-            
+
             if attempt < MAX_RETRIES:
                 current_prompt = f"The code you just provided has the following syntax error:\n{error_msg}\nPlease fix the error and provide the corrected code."
             else:
                 return {
-                    "response": text_response + "\n\n*(Note: FRIDAY detected potential syntax errors in this code. Please review carefully.)*", 
+                    "response": text_response + "\n\n*(Note: FRIDAY detected potential syntax errors in this code. Please review carefully.)*",
                     "validated": False
                 }
-                
+
     except Exception as e:
         print(f"Gemini API Error: {str(e)}")
         raise HTTPException(status_code=500, detail="FRIDAY is temporarily unable to generate a response.")

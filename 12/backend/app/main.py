@@ -37,10 +37,10 @@ if env_frontend and env_frontend not in origins:
     origins.append(env_frontend)
 
 app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=origins, 
+    CORSMiddleware,
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"], # Broadened to prevent preflight block issues
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -76,6 +76,27 @@ When generating code:
 - When debugging, identify the actual problem before providing the fix.
 """
 
+# Models tried in order — falls through to the next one only if the current one is out of daily quota
+FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
+def create_session_with_fallback(history, system_instruction):
+    """Tries each model in FALLBACK_MODELS in order; moves to the next one only on a quota/429 error."""
+    last_error = None
+    for model_name in FALLBACK_MODELS:
+        try:
+            session = client.chats.create(
+                model=model_name,
+                history=history,
+                config=types.GenerateContentConfig(system_instruction=system_instruction),
+            )
+            return session, model_name
+        except Exception as e:
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                last_error = e
+                continue  # this model is out of quota — try the next one
+            raise  # any other error (503, network, etc.) shouldn't trigger fallback
+    raise last_error  # every model in the list is exhausted
+
 # SUPABASE CLIENT FOR AUTHENTICATION
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 security = HTTPBearer()
@@ -84,7 +105,7 @@ def verify_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Verifies the JWT token from the frontend using Supabase."""
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not initialized")
-    
+
     try:
         user_res = supabase.auth.get_user(credentials.credentials)
         if not user_res or not user_res.user:
@@ -95,12 +116,12 @@ def verify_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 # STRICT INPUT VALIDATION
 class Message(BaseModel):
-    role: str = Field(..., pattern="^(user|assistant|system|model)$") # Added 'model' to match Gemini SDK types
+    role: str = Field(..., pattern="^(user|assistant|system|model)$")
     content: str = Field(..., min_length=1, max_length=10000)
     is_validated: Optional[bool] = False
 
 class ChatRequest(BaseModel):
-    messages: List[Message] = Field(..., max_items=100)
+    messages: List[Message] = Field(..., max_length=100)
 
 def extract_python_code(text: str) -> List[str]:
     pattern = r"```(?:python)?\n(.*?)\n```"
@@ -116,23 +137,18 @@ def validate_python_code(code: str) -> Optional[str]:
         return f"Error: {str(e)}"
 
 @app.post("/api/chat")
-@limiter.limit("10/minute")  
+@limiter.limit("10/minute")
 async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(verify_user)):
     try:
         formatted_history = [
             types.Content(
                 role="user" if msg.role == "user" else "model",
-                parts=[types.Part.from_text(text=msg.content)] # Corrected Part initialization
+                parts=[types.Part.from_text(text=msg.content)]
             )
             for msg in payload.messages[:-1]
         ]
 
-        # Fixed Model Name: gemini-3.5-flash does not exist. Used standard 1.5-flash.
-        chat_session = client.chats.create(
-            model="gemini-3.5-flash",
-            history=formatted_history,
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
-        )
+        chat_session, model_used = create_session_with_fallback(formatted_history, SYSTEM_PROMPT)
 
         current_prompt = payload.messages[-1].content
         MAX_RETRIES = 1
@@ -156,7 +172,8 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
             if all_valid:
                 return {
                     "response": text_response,
-                    "validated": len(code_blocks) > 0
+                    "validated": len(code_blocks) > 0,
+                    "model_used": model_used
                 }
 
             if attempt < MAX_RETRIES:
@@ -164,11 +181,14 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
             else:
                 return {
                     "response": text_response + "\n\n*(Note: FRIDAY detected potential syntax errors in this code. Please review carefully.)*",
-                    "validated": False
+                    "validated": False,
+                    "model_used": model_used
                 }
 
     except Exception as e:
         print(f"Gemini API Error: {str(e)}")
+        if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+            raise HTTPException(status_code=429, detail="FRIDAY has hit its daily AI request limit across all available models. Please try again tomorrow.")
         raise HTTPException(status_code=500, detail="FRIDAY is temporarily unable to generate a response.")
 
 @app.get("/api/health")
