@@ -235,9 +235,9 @@ FRIDAY is configured for seamless deployment on Render via the included `render.
 
 live demo🔗:- https://friday-eight-weld.vercel.app/
 
-FOR BETTER USER INTERFACE USE DESKTOP -> SUGESSTION FOR ME.
+FOR BETTER USER INTERFACE USE DESKTOP -> SUGESSTION FROM ME.
 
-👨‍💻 Author ABHISHEK THUVVARA
+👨‍💻 Author ABHISHEK THVVARA
 
 B.Tech Artificial Intelligence Student
 
