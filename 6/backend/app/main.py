@@ -1,9 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import os
-from fastapi import Response
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -19,6 +18,7 @@ app.add_middleware(
 
 # GEMINI INTEGRATION
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
 SYSTEM_PROMPT = """You are FRIDAY, an AI coding assistant specializing in Python.
 Your priorities are:
 1. Correctness
@@ -35,6 +35,29 @@ Your priorities are:
 - If the request is ambiguous, ask a concise clarification.
 - When debugging, identify the actual problem before providing the fix.
 """
+
+# Models tried in order — falls through to the next one only if the current one is out of daily quota
+FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
+def send_with_fallback(history, system_instruction, prompt):
+    """Tries each model in FALLBACK_MODELS in order; moves to the next one only on a quota/429 error."""
+    last_error = None
+    for model_name in FALLBACK_MODELS:
+        try:
+            session = client.chats.create(
+                model=model_name,
+                history=history,
+                config=types.GenerateContentConfig(system_instruction=system_instruction),
+            )
+            response = session.send_message(prompt)
+            print(f"Served by: {model_name}")
+            return response, model_name
+        except Exception as e:
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                last_error = e
+                continue  # this model is out of quota — try the next one
+            raise  # any other error (503, network, etc.) shouldn't trigger fallback
+    raise last_error  # every model in the list is exhausted
 
 class Message(BaseModel):
     role: str
@@ -55,14 +78,6 @@ async def root():
 async def favicon():
     return Response(status_code=204)
 
-
-# GEMINI INTEGRATION
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-SYSTEM_PROMPT = """You are FRIDAY, an AI coding assistant specializing in Python.
-...
-"""
-
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
@@ -74,14 +89,13 @@ async def chat_endpoint(request: ChatRequest):
             for msg in request.messages[:-1]
         ]
 
-        chat_session = client.chats.create(
-            model="gemini-3.5-flash",
-            history=formatted_history,
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+        response, model_used = send_with_fallback(
+            formatted_history, SYSTEM_PROMPT, request.messages[-1].content
         )
-        response = chat_session.send_message(request.messages[-1].content)
 
-        return {"response": response.text}
+        return {"response": response.text, "model_used": model_used}
     except Exception as e:
         print(f"Gemini API Error: {str(e)}")
+        if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+            raise HTTPException(status_code=429, detail="FRIDAY has hit its daily AI request limit across all available models. Please try again tomorrow.")
         raise HTTPException(status_code=500, detail="FRIDAY is temporarily unable to generate a response.")
