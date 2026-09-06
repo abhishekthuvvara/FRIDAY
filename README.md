@@ -13,6 +13,9 @@ FRIDAY is a production-ready, specialized AI coding assistant designed primarily
 - **Multi-Tenant Data Isolation**: Uses PostgreSQL Row Level Security (RLS) to guarantee that users can only access their own conversation history.
 - **Enterprise-Grade Security**: Implements server-side rate limiting (10 requests/minute/IP) using SlowAPI, strict Pydantic input validation, and JWT verification.
 
+FROM THE FREE VERSIONS OF VERCEL,RENDER AND GOOGLE API KEYS I DEVELOPED FALLBACK AGENTS SYSYTEM FOR MORE USAGE AUTOMATICALLY.
+THE FALLBACK_MODELS_ARE = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
 ---
 
 ## 🛠️ Technology Stack
