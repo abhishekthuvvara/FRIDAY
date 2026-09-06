@@ -6,6 +6,7 @@ from typing import List, Optional
 import os
 import ast
 import re
+import asyncio
 from google import genai
 from google.genai import types
 from supabase import create_client, Client
@@ -27,7 +28,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # Bulletproof CORS Configuration
-# Safely fetches the env variable, strips spaces, and hardcodes your known URLs as fallbacks
 env_frontend = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
 origins = [
     "http://localhost:5173",
@@ -93,9 +93,21 @@ def create_session_with_fallback(history, system_instruction):
         except Exception as e:
             if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
                 last_error = e
-                continue  # this model is out of quota — try the next one
-            raise  # any other error (503, network, etc.) shouldn't trigger fallback
-    raise last_error  # every model in the list is exhausted
+                continue
+            raise
+    raise last_error
+
+async def send_message_with_retry(chat_session, prompt, max_infra_retries=1):
+    """Sends a message, retrying once with a short delay if Gemini's servers are transiently overloaded (503)."""
+    for infra_attempt in range(max_infra_retries + 1):
+        try:
+            return chat_session.send_message(prompt)
+        except Exception as e:
+            is_transient = "503" in str(e) or "UNAVAILABLE" in str(e)
+            if is_transient and infra_attempt < max_infra_retries:
+                await asyncio.sleep(2)
+                continue
+            raise
 
 # SUPABASE CLIENT FOR AUTHENTICATION
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
@@ -154,7 +166,7 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
         MAX_RETRIES = 1
 
         for attempt in range(MAX_RETRIES + 1):
-            response = chat_session.send_message(current_prompt)
+            response = await send_message_with_retry(chat_session, current_prompt)
             text_response = response.text
 
             code_blocks = extract_python_code(text_response)
@@ -189,6 +201,8 @@ async def chat_endpoint(request: Request, payload: ChatRequest, user=Depends(ver
         print(f"Gemini API Error: {str(e)}")
         if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
             raise HTTPException(status_code=429, detail="FRIDAY has hit its daily AI request limit across all available models. Please try again tomorrow.")
+        if "503" in str(e) or "UNAVAILABLE" in str(e):
+            raise HTTPException(status_code=503, detail="FRIDAY's AI model is temporarily overloaded on Google's side. Please try again in a moment.")
         raise HTTPException(status_code=500, detail="FRIDAY is temporarily unable to generate a response.")
 
 @app.get("/api/health")
